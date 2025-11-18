@@ -1,21 +1,55 @@
 import { useState } from 'react';
+import { supabase } from '../lib/supabase';
+import mixpanel from 'mixpanel-browser';
 
 const EmailCapture = () => {
   const [email, setEmail] = useState('');
   const [workflow, setWorkflow] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
+    setIsSubmitting(true);
+
     if (email) {
-      // Simulate submission
-      setSubmitted(true);
-      // Reset form after 3 seconds (optional)
-      setTimeout(() => {
-        setEmail('');
-        setWorkflow('');
-        setSubmitted(false);
-      }, 5000);
+      try {
+        // Insert into Supabase
+        const { error: insertError } = await supabase
+          .from('early_access_requests')
+          .insert([
+            {
+              email: email.trim(),
+              workflow: workflow.trim() || null,
+            },
+          ])
+          .select();
+
+        if (insertError) {
+          throw insertError;
+        }
+
+        // Track with Mixpanel
+        mixpanel.track('Early Access Request', {
+          email: email.trim(),
+          has_workflow: !!workflow.trim(),
+        });
+
+        setSubmitted(true);
+        // Reset form after 5 seconds
+        setTimeout(() => {
+          setEmail('');
+          setWorkflow('');
+          setSubmitted(false);
+        }, 5000);
+      } catch (err) {
+        console.error('Error submitting early access request:', err);
+        setError('Something went wrong. Please try again.');
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -60,11 +94,17 @@ const EmailCapture = () => {
                 placeholder="Tell us about your AI development workflow..."
               />
             </div>
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-4 text-red-400 text-sm">
+                {error}
+              </div>
+            )}
             <button
               type="submit"
-              className="w-full bg-amber-400 text-slate-950 px-6 py-3 rounded-lg font-semibold hover:bg-amber-300 transition-colors"
+              disabled={isSubmitting}
+              className="w-full bg-amber-400 text-slate-950 px-6 py-3 rounded-lg font-semibold hover:bg-amber-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Get early access
+              {isSubmitting ? 'Submitting...' : 'Get early access'}
             </button>
           </form>
         ) : (
