@@ -9,6 +9,7 @@ import ForInvestors from './components/ForInvestors';
 import Roadmap from './components/Roadmap';
 import TeamCTA from './components/TeamCTA';
 import EmailCapture from './components/EmailCapture';
+import FeedbackBadge from './components/FeedbackBadge';
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
       <Roadmap />
       <TeamCTA />
       <EmailCapture />
+      <FeedbackBadge />
     </div>
   );
 }
