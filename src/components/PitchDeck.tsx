@@ -157,94 +157,41 @@ const ContactForm = () => {
   );
 };
 
+const SLIDE_WIDTH = 1920;
+const SLIDE_HEIGHT = 1080;
+
 const PitchDeck = () => {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
-  const [slideScales, setSlideScales] = useState<number[]>(new Array(11).fill(1));
-  const slideRefs = useRef<(HTMLDivElement | null)[]>(new Array(11).fill(null));
+  const [viewportScale, setViewportScale] = useState(1);
+  const viewportRef = useRef<HTMLDivElement>(null);
   const slideContainerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
   const minSwipeDistance = 50;
   const totalSlides = 11;
 
-  // Calculate scale for each slide to fit within 16:9 container
+  // Uniform scale: fixed 1920×1080 canvas letterboxed into the viewport
   useEffect(() => {
-    const calculateScales = () => {
-      const container = slideContainerRef.current?.parentElement;
-      if (!container) return;
+    const viewport = viewportRef.current;
+    if (!viewport) return;
 
-      const containerWidth = container.clientWidth;
-      const containerHeight = container.clientHeight;
-
-      const newScales = slideRefs.current.map((slideRef) => {
-        if (!slideRef) return 1;
-
-        const content = slideRef.querySelector('[data-slide-content]') as HTMLElement;
-        if (!content) return 1;
-
-        // Store current styles
-        const originalTransform = content.style.transform;
-        const originalWidth = content.style.width;
-        const originalHeight = content.style.height;
-        const originalMaxWidth = content.style.maxWidth;
-        const originalMaxHeight = content.style.maxHeight;
-
-        // Temporarily remove all constraints to measure natural size
-        content.style.transform = 'scale(1)';
-        content.style.width = 'auto';
-        content.style.height = 'auto';
-        content.style.maxWidth = 'none';
-        content.style.maxHeight = 'none';
-        
-        // Force reflow
-        void content.offsetWidth;
-        void content.offsetHeight;
-        
-        // Measure the content's natural dimensions using bounding rect
-        const rect = content.getBoundingClientRect();
-        const contentWidth = rect.width || content.scrollWidth;
-        const contentHeight = rect.height || content.scrollHeight;
-
-        // Restore original styles
-        content.style.transform = originalTransform;
-        content.style.width = originalWidth;
-        content.style.height = originalHeight;
-        content.style.maxWidth = originalMaxWidth;
-        content.style.maxHeight = originalMaxHeight;
-
-        // Calculate scale needed to fit within container
-        if (contentWidth === 0 || contentHeight === 0) return 1;
-        
-        const scaleX = containerWidth / contentWidth;
-        const scaleY = containerHeight / contentHeight;
-        const newScale = Math.min(scaleX, scaleY, 1); // Don't scale up, only down
-
-        return newScale;
-      });
-
-      setSlideScales(newScales);
+    const updateScale = () => {
+      const { width, height } = viewport.getBoundingClientRect();
+      setViewportScale(Math.min(width / SLIDE_WIDTH, height / SLIDE_HEIGHT));
     };
 
-    // Calculate after a short delay to ensure DOM is ready
-    const timeoutId = setTimeout(calculateScales, 100);
-    const rafId = requestAnimationFrame(() => {
-      setTimeout(calculateScales, 200);
-    });
-
-    window.addEventListener('resize', calculateScales);
-
-    // Recalculate when slide changes
-    const timeoutId2 = setTimeout(calculateScales, 300);
+    updateScale();
+    const observer = new ResizeObserver(updateScale);
+    observer.observe(viewport);
+    window.addEventListener('resize', updateScale);
 
     return () => {
-      clearTimeout(timeoutId);
-      clearTimeout(timeoutId2);
-      cancelAnimationFrame(rafId);
-      window.removeEventListener('resize', calculateScales);
+      observer.disconnect();
+      window.removeEventListener('resize', updateScale);
     };
-  }, [currentSlide]);
+  }, []);
 
   // Keyboard navigation
   useEffect(() => {
@@ -887,7 +834,7 @@ const PitchDeck = () => {
 
   return (
     <div
-      className="fixed inset-0 bg-slate-950 overflow-hidden"
+      className="fixed inset-0 bg-black overflow-hidden"
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
@@ -900,50 +847,43 @@ const PitchDeck = () => {
         />
       </div>
 
-      {/* Slide Container - 16:9 aspect ratio, 100% viewport width */}
-      <div
-        className="absolute inset-0 overflow-hidden"
-      >
+      {/* Letterboxed 16:9 viewport — black bars fill the rest of the screen */}
+      <div className="absolute inset-0 flex items-center justify-center">
         <div
-          className="w-full h-full"
+          ref={viewportRef}
+          className="relative overflow-hidden bg-slate-950"
           style={{
-            width: '100vw',
-            aspectRatio: '16 / 9',
-            maxHeight: '100vh',
+            width: 'min(100vw, calc(100vh * 16 / 9))',
+            height: 'min(100vh, calc(100vw * 9 / 16))',
           }}
         >
           <div
-            ref={slideContainerRef}
-            className="flex h-full transition-transform duration-500 ease-in-out"
+            className="absolute left-1/2 top-1/2"
             style={{
-              transform: `translateX(-${currentSlide * 100}%)`,
+              width: SLIDE_WIDTH,
+              height: SLIDE_HEIGHT,
+              transform: `translate(-50%, -50%) scale(${viewportScale})`,
+              transformOrigin: 'center center',
             }}
           >
-            {slides.map((slide, index) => (
-              <div
-                key={slide.id}
-                ref={(el) => {
-                  slideRefs.current[index] = el;
-                }}
-                className="flex-shrink-0 w-full h-full flex items-center justify-center overflow-hidden"
-                style={{
-                  position: 'relative',
-                }}
-              >
+            <div
+              ref={slideContainerRef}
+              className="flex h-full transition-transform duration-500 ease-in-out"
+              style={{
+                width: SLIDE_WIDTH * totalSlides,
+                transform: `translateX(-${currentSlide * SLIDE_WIDTH}px)`,
+              }}
+            >
+              {slides.map((slide) => (
                 <div
-                  data-slide-content
-                  className="flex items-center justify-center"
-                  style={{
-                    transform: `scale(${slideScales[index]})`,
-                    transformOrigin: 'center center',
-                    width: 'max-content',
-                    height: 'max-content',
-                  }}
+                  key={slide.id}
+                  className="flex-shrink-0 overflow-hidden"
+                  style={{ width: SLIDE_WIDTH, height: SLIDE_HEIGHT }}
                 >
                   {slide.content}
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       </div>
